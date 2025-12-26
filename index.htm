@@ -68,12 +68,56 @@
 const SIDE = 40;
 const WIDTH = Math.round((Math.sqrt(3)/2) * SIDE);
 
-const COLOR_SCHEMES = {
-  "5 greys": ["#323232","#4b4b4b","#646464","#7d7d7d","#969696"],
-  "Turquise, Blue, Yellow, Brown": ["#22e3da","#1b6da9","#ecc01f","#ffdd14","#71462A"],
-  "Basic Scale": ["#4286b8","#b12b44","#d39239","#ddd550"],
-  "Ocean": ["#003264","#004b96","#0064c8","#3296ff","#64c8ff"]
+// Full palette library with categories
+const COLOR_SCHEMES_BY_CATEGORY = {
+  "Cool": {
+    "Cosmic Space": ["#0d1b2a","#1b263b","#415a77","#778da9","#e0e1dd"],
+	"Sunny Woods": ["#1b4d3e", "#2e8b57", "#66cdaa", "#fff176", "#87cefa"],
+	"Satin Linen": [ "#e2e4d1", "#d82b62", "#243e0a", "#a9bee9", "#525f5e" ]
+  },
+  "Warm": {
+    "Ocean Blues": ["#003f5c","#2f4b7c","#665191","#a05195","#d45087"],
+    "Sunset Glow": ["#ff6e54","#ffa600","#ff7c43","#f95d6a","#d45087"],
+    "Cherry Reds": ["#ff0000","#ff4d4d","#ff6666","#ff9999","#ffcccc"],
+    "Rose Garden": ["#b11226","#d63447","#e68a8a","#f2b5b5","#ffe5e5"],
+    "Berry Mix": ["#9b111e","#c72c48","#e7546b","#f78fa7","#ffc0cb"],
+	"Evening": ["#364f84","#4e632a","#90321f","#fac625","#6a5222"],
+    "Golden Sunset": ["#ffd700","#ff9a00","#ff4500","#ff2d55","#ff85a2"],
+    "Flaming Rose": ["#fff176","#ffc107","#ff6f61","#ff4081","#ffb6c1"]
+  },
+  "Pastel / Soft": {
+    "Candy Pastels": ["#ffadad","#ffd6a5","#fdffb6","#caffbf","#9bf6ff"],
+    "5 Greys": ["#111111","#333333","#555555","#777777","#999999"]
+  },
+  "Vivid": {
+    "Sunrise": ["#ffbe0b","#fb5607","#ff006e","#8338ec","#3a86ff"],
+	"Rainbow": [ "#E40303", "#FF8C00", "#FFED00", "#008026", "#004DFF", "#750787"]
+  },
+  "Earthy / Brown": {
+    "Warm Browns": ["#4b2e2e","#704040","#a65d4d","#c48b7f","#e6cfc0"],
+    "Chocolate": ["#3b1f1f","#5c3a3a","#7d5656","#a07c7c","#c4a3a3"],
+    "Sandstone": ["#7b5e57","#a1796b","#c59b8f","#d9bfb5","#efdfda"],
+	"Desert Dawn": ["#fff59d","#ffd54f","#ffb74d","#a97448","#7b5e4f"],
+	"Desert Sunset": ["#fff59d", "#ffd54f", "#ff8c42", "#e63946", "#a63c28"],
+    "Autumn Hues": ["#fff176","#ffeb3b","#fbc02d","#a1887f","#6d4c41"]
+  },
+  "Forest": {
+    "Forest Greens": ["#2a9d8f","#264653","#81b29a","#e9c46a","#f4a261"],
+	"Forest Morning": ["#2a7f5e", "#3cb371", "#a3d977", "#ffe066", "#87ceeb"],
+	"Autumn Forest": ["#4b773c", "#88b04b", "#d4e157", "#ffc107", "#81d4fa"],
+    "Forest Twilight": ["#2a7f5e", "#3cb371", "#a3d977", "#ffe066", "#264653"],
+    "Deep Woods": ["#1b4d3e", "#2e8b57", "#66cdaa", "#fff176", "#1b263b"],
+	"Evening Forest": ["#4b773c", "#88b04b", "#d4e157", "#ffc107", "#0d1b2a"]
+  }
 };
+
+// Flatten into a single COLOR_SCHEMES object for game logic
+const COLOR_SCHEMES = {};
+Object.values(COLOR_SCHEMES_BY_CATEGORY).forEach(cat=>{
+  Object.entries(cat).forEach(([name,colors])=>{
+    COLOR_SCHEMES[name]=colors;
+  });
+});
 
 /* ===================== State ===================== */
 let currentColorScheme = Object.keys(COLOR_SCHEMES)[0];
@@ -305,12 +349,21 @@ document.getElementById("reshuffle").onclick=reshuffleAction;
 document.getElementById("colorScheme").onchange=e=>applyColorScheme(e.target.value);
 
 /* ===================== Init ===================== */
+
+// Populate <select> with categories and palettes
 function populateColorSchemes(){
   const sel=document.getElementById("colorScheme");
-  Object.keys(COLOR_SCHEMES).forEach(k=>{
-    const o=document.createElement("option");
-    o.value=o.textContent=k;
-    sel.appendChild(o);
+  sel.innerHTML="";
+  Object.entries(COLOR_SCHEMES_BY_CATEGORY).forEach(([category,palettes])=>{
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = category;
+    Object.keys(palettes).forEach(name=>{
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      optgroup.appendChild(option);
+    });
+    sel.appendChild(optgroup);
   });
 }
 
