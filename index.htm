@@ -56,6 +56,13 @@
   <button id="undo">Undo</button>
   <button id="reset">Reset</button>
   <button id="reshuffle">Randomize</button>
+  <select id="rotateScheme">
+    <option value="0">Rotate: Off</option>
+    <option value="10">Rotate: 10s</option>
+    <option value="20">Rotate: 20s</option>
+    <option value="40">Rotate: 40s</option>
+    <option value="60">Rotate: 60s</option>
+  </select>
 
   <!-- Palette preview replaces Blank Slate -->
   <div id="palettePreview" style="display:inline-block; margin-left:20px; vertical-align:middle;"></div>
@@ -71,6 +78,7 @@ const WIDTH = Math.round((Math.sqrt(3)/2) * SIDE);
 // Full palette library with categories
 const COLOR_SCHEMES_BY_CATEGORY = {
   "Cool": {
+    "Ocean": [ "#003264", "#004b96", "#0064c8", "#3296ff", "#64c8ff"],
     "Cosmic Space": ["#0d1b2a","#1b263b","#415a77","#778da9","#e0e1dd"],
 	"Sunny Woods": ["#1b4d3e", "#2e8b57", "#66cdaa", "#fff176", "#87cefa"],
 	"Satin Linen": [ "#e2e4d1", "#d82b62", "#243e0a", "#a9bee9", "#525f5e" ]
@@ -82,11 +90,11 @@ const COLOR_SCHEMES_BY_CATEGORY = {
     "Rose Garden": ["#b11226","#d63447","#e68a8a","#f2b5b5","#ffe5e5"],
     "Berry Mix": ["#9b111e","#c72c48","#e7546b","#f78fa7","#ffc0cb"],
 	"Evening": ["#364f84","#4e632a","#90321f","#fac625","#6a5222"],
-    "Golden Sunset": ["#ffd700","#ff9a00","#ff4500","#ff2d55","#ff85a2"],
-    "Flaming Rose": ["#fff176","#ffc107","#ff6f61","#ff4081","#ffb6c1"]
+    "Golden Sunset": ["#ffd700","#ff9a00","#ff4500","#ff2d55","#ff85a2"]
   },
   "Pastel / Soft": {
     "Candy Pastels": ["#ffadad","#ffd6a5","#fdffb6","#caffbf","#9bf6ff"],
+    "Flaming Rose": ["#fff176","#ffc107","#ff6f61","#ff4081","#ffb6c1"],
     "5 Greys": ["#111111","#333333","#555555","#777777","#999999"]
   },
   "Vivid": {
@@ -102,12 +110,12 @@ const COLOR_SCHEMES_BY_CATEGORY = {
     "Autumn Hues": ["#fff176","#ffeb3b","#fbc02d","#a1887f","#6d4c41"]
   },
   "Forest": {
-    "Forest Greens": ["#2a9d8f","#264653","#81b29a","#e9c46a","#f4a261"],
-	"Forest Morning": ["#2a7f5e", "#3cb371", "#a3d977", "#ffe066", "#87ceeb"],
-	"Autumn Forest": ["#4b773c", "#88b04b", "#d4e157", "#ffc107", "#81d4fa"],
-    "Forest Twilight": ["#2a7f5e", "#3cb371", "#a3d977", "#ffe066", "#264653"],
-    "Deep Woods": ["#1b4d3e", "#2e8b57", "#66cdaa", "#fff176", "#1b263b"],
-	"Evening Forest": ["#4b773c", "#88b04b", "#d4e157", "#ffc107", "#0d1b2a"]
+    "Forest Greens": ["#2a9d8f","#264653","#e9c46a","#f4a261"],
+	"Forest Morning": ["#2a7f5e","#a3d977", "#ffe066", "#87ceeb"],
+	"Autumn Forest": ["#4b773c","#d4e157", "#ffc107", "#81d4fa"],
+    "Forest Twilight": ["#2a7f5e", "#a3d977", "#ffe066", "#264653"],
+    "Bright Woods": ["#1b4d3e", "#2e8b57", "#66cdaa", "#fff176"],
+	"Morning Forest": ["#4b773c", "#88b04b", "#d4e157", "#ffc107"]
   }
 };
 
@@ -141,6 +149,36 @@ let dragChanges = [];
 let mouseDownPos = null;
 let justFinishedDrag = false;
 
+/* Rotation feature */
+let rotateIntervalId = null;
+
+const rotateSelect = document.getElementById("rotateScheme");
+const colorSchemeNames = Object.keys(COLOR_SCHEMES); // Array of all scheme names
+let rotateIndex = colorSchemeNames.indexOf(currentColorScheme);
+
+rotateSelect.onchange = () => {
+  const seconds = parseInt(rotateSelect.value, 10);
+  
+  // Clear previous interval
+  if (rotateIntervalId) {
+    clearInterval(rotateIntervalId);
+    rotateIntervalId = null;
+  }
+
+  if (seconds > 0) {
+    rotateIntervalId = setInterval(() => {
+      rotateIndex = (rotateIndex + 1) % colorSchemeNames.length;
+      const nextScheme = colorSchemeNames[rotateIndex];
+      document.getElementById("colorScheme").value = nextScheme;
+      applyColorScheme(nextScheme);
+    }, seconds * 1000);
+  }
+};
+
+// Ensure rotation starts correctly if the first scheme is not the first in the list
+rotateIndex = colorSchemeNames.indexOf(currentColorScheme);
+
+
 /* ===================== Helpers ===================== */
 function getCurrentColors() {
   return COLOR_SCHEMES[currentColorScheme];
@@ -159,6 +197,43 @@ function rgbToHex(r,g,b) {
 }
 
 /* ===================== Grid ===================== */
+function initGridTruncated() {
+  triangles = [];
+  // Only generate full rows/cols
+  for (let row = 0; row < rows; row++) {
+    const y = row * (SIDE / 2);
+    const xShift = (row % 2 === 0) ? 0 : WIDTH;
+    for (let col = 1; col < cols - 1; col++) { // skip first and last column
+      const direction = (col % 2 === 0) ? 'right' : 'left';
+      const x = col * WIDTH + xShift;
+      const ci = Math.floor(Math.random() * getCurrentColors().length);
+      let points;
+      if (direction === 'right') {
+        points = [
+          [x, y],
+          [x, y + SIDE],
+          [x + WIDTH, y + SIDE / 2]
+        ];
+      } else {
+        points = [
+          [x + WIDTH, y],
+          [x + WIDTH, y + SIDE],
+          [x, y + SIDE / 2]
+        ];
+      }
+      const color = getCurrentColors()[ci];
+      triangles.push({
+        points,
+        colorIndex: ci,
+        currentColor: hexToRgb(color),
+        targetColor: hexToRgb(color),
+        animStart: 0
+      });
+    }
+  }
+  originalColors = triangles.map(t => t.colorIndex);
+}
+
 function initGrid() {
   triangles = [];
   for (let row=0; row<rows; row++) {
@@ -174,6 +249,10 @@ function initGrid() {
       const ci = Math.floor(Math.random() * getCurrentColors().length);
       const rgb = hexToRgb(getCurrentColors()[ci]);
 
+      // hack to skip partial rectangles at left and right
+      if ((right && x == 0) || (!right && x + WIDTH > canvas.width)) {
+	    continue;
+	  }
       triangles.push({
         points,
         colorIndex: ci,
@@ -191,22 +270,22 @@ function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const now = performance.now();
   triangles.forEach((t,i)=>{
-    const p = Math.min((now - t.animStart)/200,1);
-    t.currentColor = t.currentColor.map((c,j)=>Math.round(c + (t.targetColor[j]-c)*p));
+	const p = Math.min((now - t.animStart)/200,1);
+	t.currentColor = t.currentColor.map((c,j)=>Math.round(c + (t.targetColor[j]-c)*p));
 
-    ctx.fillStyle = rgbToHex(...t.currentColor);
-    ctx.beginPath();
-    ctx.moveTo(...t.points[0]);
-    ctx.lineTo(...t.points[1]);
-    ctx.lineTo(...t.points[2]);
-    ctx.closePath();
-    ctx.fill();
+	ctx.fillStyle = rgbToHex(...t.currentColor);
+	ctx.beginPath();
+	ctx.moveTo(...t.points[0]);
+	ctx.lineTo(...t.points[1]);
+	ctx.lineTo(...t.points[2]);
+	ctx.closePath();
+	ctx.fill();
 
-    if(i===hoverIndex){
-      ctx.strokeStyle="rgba(255,255,255,0.5)";
-      ctx.lineWidth=2;
-      ctx.stroke();
-    }
+	if(i===hoverIndex){
+	  ctx.strokeStyle="rgba(255,255,255,0.5)";
+	  ctx.lineWidth=2;
+	  ctx.stroke();
+	}
   });
 }
 
