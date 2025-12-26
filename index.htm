@@ -1,6 +1,6 @@
 <!DOCTYPE html>
-<html><head>
-<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<html>
+<head>
 <meta charset="UTF-8">
 <title>Triangle Pattern Game</title>
 <style>
@@ -11,15 +11,11 @@
     text-align: center;
     margin: 0;
     padding: 0;
-    touch-action: none; /* Prevent scrolling during touch drag */
+    touch-action: none;
   }
-  h1 {
-    margin-top: 15px;
-  }
-  #controls {
-    margin: 15px;
-  }
-  button {
+  h1 { margin-top: 15px; }
+  #controls { margin: 15px; }
+  button, select {
     margin: 0 8px;
     padding: 10px 18px;
     font-size: 16px;
@@ -31,7 +27,7 @@
     box-shadow: 0 3px 5px rgba(0,0,0,0.4);
     transition: background 0.2s, transform 0.1s;
   }
-  button:hover {
+  button:hover, select:hover {
     background: #555;
     transform: translateY(-2px);
   }
@@ -39,19 +35,8 @@
     background: #222;
     transform: translateY(0);
   }
-  select {
-    margin: 0 8px;
-    padding: 10px 18px;
-    font-size: 16px;
-    border: none;
-    border-radius: 6px;
-    background: #333;
-    color: white;
-    cursor: pointer;
-    box-shadow: 0 3px 5px rgba(0,0,0,0.4);
-  }
-  select:hover {
-    background: #555;
+  #palettePreview div:hover {
+    border-color: white;
   }
   canvas {
     display: block;
@@ -62,68 +47,41 @@
   }
 </style>
 </head>
-<body>
 
+<body>
 <h1>Triangle Pattern Game</h1>
+
 <div id="controls">
-  <select id="colorScheme">
-  </select>
+  <select id="colorScheme"></select>
   <button id="undo">Undo</button>
   <button id="reset">Reset</button>
   <button id="reshuffle">Randomize</button>
-  <button id="constant">Blank Slate</button>
+
+  <!-- Palette preview replaces Blank Slate -->
+  <div id="palettePreview" style="display:inline-block; margin-left:20px; vertical-align:middle;"></div>
 </div>
+
 <canvas id="canvas" width="1200" height="800"></canvas>
 
 <script>
+/* ===================== Constants ===================== */
 const SIDE = 40;
-const WIDTH = Math.round((Math.sqrt(3) / 2) * SIDE);
+const WIDTH = Math.round((Math.sqrt(3)/2) * SIDE);
+
 const COLOR_SCHEMES = {
-  "5 greys": [
-    "#323232",
-    "#4b4b4b",
-    "#646464",
-    "#7d7d7d",
-    "#969696"
-  ],
-  "Turquise, Blue, Yellow, Brown": [
-    "#22e3da",
-    "#1b6da9",
-    "#ecc01f",
-    "#ffdd14",
-    "#71462A",
-  ],
-  "Ocean": [
-    "#003264",
-    "#004b96",
-    "#0064c8",
-    "#3296ff",
-    "#64c8ff"
-  ]
+  "5 greys": ["#323232","#4b4b4b","#646464","#7d7d7d","#969696"],
+  "Turquise, Blue, Yellow, Brown": ["#22e3da","#1b6da9","#ecc01f","#ffdd14","#71462A"],
+  "Basic Scale": ["#4286b8","#b12b44","#d39239","#ddd550"],
+  "Ocean": ["#003264","#004b96","#0064c8","#3296ff","#64c8ff"]
 };
 
+/* ===================== State ===================== */
 let currentColorScheme = Object.keys(COLOR_SCHEMES)[0];
-let constantColorIndex = 0;
 
-function getCurrentColors() {
-  return COLOR_SCHEMES[currentColorScheme];
-}
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-function hexToRgb(hex) {
-  hex = hex.toLowerCase();
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return [r, g, b];
-}
-
-function rgbToHex(r, g, b) {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-}
-
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const rows = Math.floor(canvas.height / (SIDE / 2));
+const rows = Math.floor(canvas.height / (SIDE/2));
 const cols = Math.floor(canvas.width / WIDTH);
 
 let triangles = [];
@@ -131,67 +89,68 @@ let originalColors = [];
 let undoStack = [];
 let redoStack = [];
 let hoverIndex = -1;
-let lastTouchIndex = -1;
-let touchTimer = null;
-let touchStartTime = 0;
-const LONG_PRESS_MS = 500;
 
-// Drag state variables
+/* Drag state */
 let isDragging = false;
 let dragAffectedTriangles = new Set();
 let dragChanges = [];
-let justFinishedDrag = false;
 let mouseDownPos = null;
-let hasDraggedDistance = false;
+let justFinishedDrag = false;
 
-// ---- Triangle structure ----
+/* ===================== Helpers ===================== */
+function getCurrentColors() {
+  return COLOR_SCHEMES[currentColorScheme];
+}
+
+function hexToRgb(hex) {
+  return [
+    parseInt(hex.slice(1,3),16),
+    parseInt(hex.slice(3,5),16),
+    parseInt(hex.slice(5,7),16)
+  ];
+}
+
+function rgbToHex(r,g,b) {
+  return "#" + ((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+
+/* ===================== Grid ===================== */
 function initGrid() {
   triangles = [];
-  for (let row = 0; row < rows; row++) {
-    const y = row * (SIDE / 2);
-    const xShift = (row % 2 === 0) ? 0 : WIDTH;
-    for (let col = 0; col < cols; col++) {
-      const direction = (col % 2 === 0) ? 'right' : 'left';
-      const x = col * WIDTH + xShift;
+  for (let row=0; row<rows; row++) {
+    const y = row*(SIDE/2);
+    const xShift = row%2 === 0 ? 0 : WIDTH;
+    for (let col=0; col<cols; col++) {
+      const x = col*WIDTH + xShift;
+      const right = col%2 === 0;
+      const points = right
+        ? [[x,y],[x,y+SIDE],[x+WIDTH,y+SIDE/2]]
+        : [[x+WIDTH,y],[x+WIDTH,y+SIDE],[x,y+SIDE/2]];
+
       const ci = Math.floor(Math.random() * getCurrentColors().length);
-      let points;
-      if (direction === 'right') {
-        points = [
-          [x, y],
-          [x, y + SIDE],
-          [x + WIDTH, y + SIDE / 2]
-        ];
-      } else {
-        points = [
-          [x + WIDTH, y],
-          [x + WIDTH, y + SIDE],
-          [x, y + SIDE / 2]
-        ];
-      }
-      const color = getCurrentColors()[ci];
+      const rgb = hexToRgb(getCurrentColors()[ci]);
+
       triangles.push({
         points,
         colorIndex: ci,
-        currentColor: hexToRgb(color),
-        targetColor: hexToRgb(color),
+        currentColor: [...rgb],
+        targetColor: [...rgb],
         animStart: 0
       });
     }
   }
-  originalColors = triangles.map(t => t.colorIndex);
+  originalColors = triangles.map(t=>t.colorIndex);
 }
 
-// ---- Drawing ----
+/* ===================== Drawing ===================== */
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   const now = performance.now();
-  for (let i = 0; i < triangles.length; i++) {
-    const t = triangles[i];
-    const progress = Math.min((now - t.animStart) / 200, 1);
-    t.currentColor = t.currentColor.map((c, idx) =>
-      Math.round(c + (t.targetColor[idx] - c) * progress)
-    );
-    ctx.fillStyle = rgbToHex(t.currentColor[0], t.currentColor[1], t.currentColor[2]);
+  triangles.forEach((t,i)=>{
+    const p = Math.min((now - t.animStart)/200,1);
+    t.currentColor = t.currentColor.map((c,j)=>Math.round(c + (t.targetColor[j]-c)*p));
+
+    ctx.fillStyle = rgbToHex(...t.currentColor);
     ctx.beginPath();
     ctx.moveTo(...t.points[0]);
     ctx.lineTo(...t.points[1]);
@@ -199,321 +158,167 @@ function draw() {
     ctx.closePath();
     ctx.fill();
 
-    // Hover/Touch highlight
-    if (i === hoverIndex || i === lastTouchIndex) {
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 2;
+    if(i===hoverIndex){
+      ctx.strokeStyle="rgba(255,255,255,0.5)";
+      ctx.lineWidth=2;
       ctx.stroke();
     }
-  }
+  });
 }
 
-// ---- Point in triangle ----
-function pointInTriangle(px, py, tri) {
-  const [ax, ay] = tri[0];
-  const [bx, by] = tri[1];
-  const [cx, cy] = tri[2];
-  const denom = (by - cy)*(ax - cx) + (cx - bx)*(ay - cy);
-  const a = ((by - cy)*(px - cx) + (cx - bx)*(py - cy)) / denom;
-  const b = ((cy - ay)*(px - cx) + (ax - cx)*(py - cy)) / denom;
-  const c = 1 - a - b;
-  return a >= -0.01 && a <= 1.01 && b >= -0.01 && b <= 1.01 && c >= -0.01 && c <= 1.01; // Tolerance for taps
+/* ===================== Geometry ===================== */
+function pointInTriangle(px, py, tri){
+  const [a,b,c]=tri;
+  const area=(b[1]-c[1])*(a[0]-c[0])+(c[0]-b[0])*(a[1]-c[1]);
+  const s=((b[1]-c[1])*(px-c[0])+(c[0]-b[0])*(py-c[1]))/area;
+  const t=((c[1]-a[1])*(px-c[0])+(a[0]-c[0])*(py-c[1]))/area;
+  return s>=-0.01 && t>=-0.01 && s+t<=1.01;
 }
 
-// ---- Undo/redo ----
-function saveDiff(index, oldColor, newColor) {
-  undoStack.push([{ index, oldColor, newColor }]);
-  redoStack.length = 0;
+/* ===================== Undo helpers ===================== */
+function setTriangleColor(index,newColor){
+  const t=triangles[index];
+  const oldColor=t.colorIndex;
+  if(oldColor===newColor) return null;
+  t.colorIndex=newColor;
+  t.animStart=performance.now();
+  t.targetColor=hexToRgb(getCurrentColors()[newColor]);
+  return {index,oldColor,newColor};
 }
-function saveBatchDiff(changes) {
-  if (changes.length > 0) {
+
+function saveBatchDiff(changes){
+  if(changes.length){
     undoStack.push(changes);
-    redoStack.length = 0;
-  }
-}
-function applyDiff(diff, forward = true) {
-  for (const change of diff) {
-    const t = triangles[change.index];
-    const ci = forward ? change.newColor : change.oldColor;
-    t.colorIndex = ci;
-    t.animStart = performance.now();
-    t.targetColor = hexToRgb(getCurrentColors()[ci]);
+    redoStack.length=0;
   }
 }
 
-// ---- Drag functionality ----
-function shuffleTriangleUnderPointer(mx, my) {
-  for (let i = 0; i < triangles.length; i++) {
-    if (pointInTriangle(mx, my, triangles[i].points)) {
-      const t = triangles[i];
-      const oldColor = t.colorIndex;
-      const newColor = Math.floor(Math.random() * getCurrentColors().length);
-      
-      if (oldColor !== newColor) {
-        // Track the original color only if this triangle hasn't been changed yet in this drag
-        if (!dragAffectedTriangles.has(i)) {
-          dragChanges.push({ index: i, oldColor, newColor });
-          dragAffectedTriangles.add(i);
-        } else {
-          // Update the newColor for existing change record
-          const existingChange = dragChanges.find(change => change.index === i);
-          if (existingChange) {
-            existingChange.newColor = newColor;
-          }
-        }
-        
-        t.colorIndex = newColor;
-        t.animStart = performance.now();
-        t.targetColor = hexToRgb(getCurrentColors()[newColor]);
+function applyDiff(diff,forward){
+  diff.forEach(d=>setTriangleColor(d.index, forward?d.newColor:d.oldColor));
+}
+
+/* ===================== Drag shuffle ===================== */
+function shuffleTriangleUnderPointer(mx,my){
+  for(let i=0;i<triangles.length;i++){
+    if(pointInTriangle(mx,my,triangles[i].points)){
+      const newColor=Math.floor(Math.random()*getCurrentColors().length);
+      const change=setTriangleColor(i,newColor);
+      if(!change) return;
+      if(!dragAffectedTriangles.has(i)){
+        dragAffectedTriangles.add(i);
+        dragChanges.push(change);
+      } else {
+        const existing = dragChanges.find(c=>c.index===i);
+        if(existing) existing.newColor = newColor;
       }
-      break;
+      return;
     }
   }
 }
 
-// ---- Mouse events ----
-canvas.addEventListener('mousedown', e => {
-  if (e.button === 0) { // Left mouse button
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    mouseDownPos = { x: mx, y: my };
-    hasDraggedDistance = false;
-  }
+/* ===================== Actions ===================== */
+function undoAction(){ if(!undoStack.length) return; const diff=undoStack.pop(); applyDiff(diff,false); redoStack.push(diff); }
+function resetAction(){ triangles.forEach((_,i)=>setTriangleColor(i,originalColors[i])); undoStack.length=redoStack.length=0; }
+function reshuffleAction(){ triangles.forEach((_,i)=>setTriangleColor(i,Math.floor(Math.random()*getCurrentColors().length))); originalColors=triangles.map(t=>t.colorIndex); undoStack.length=redoStack.length=0; }
+
+/* ===================== Color scheme ===================== */
+function applyColorScheme(scheme){
+  currentColorScheme=scheme;
+  initGrid();
+  undoStack.length=redoStack.length=0;
+  renderPalette();
+}
+
+/* ===================== Palette ===================== */
+function renderPalette(){
+  const container=document.getElementById("palettePreview");
+  container.innerHTML="";
+  const colors=getCurrentColors();
+  colors.forEach((color,index)=>{
+    const square=document.createElement("div");
+    square.style.display="inline-block";
+    square.style.width=WIDTH+"px";
+    square.style.height=SIDE+"px";
+    square.style.backgroundColor=color;
+    square.style.marginRight="2px";
+    square.style.border="1px solid #555";
+    square.style.cursor="pointer";
+    square.onclick=()=>{
+      const changes=[];
+      triangles.forEach((_,i)=>{
+        const c=setTriangleColor(i,index);
+        if(c) changes.push(c);
+      });
+      saveBatchDiff(changes);
+    };
+    container.appendChild(square);
+  });
+}
+
+/* ===================== Events ===================== */
+canvas.addEventListener("mousedown",e=>{
+  if(e.button!==0) return;
+  const r=canvas.getBoundingClientRect();
+  mouseDownPos={x:e.clientX-r.left,y:e.clientY-r.top};
 });
-canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-  
-  // Check if we should start dragging
-  if (mouseDownPos && !isDragging) {
-    const distance = Math.sqrt(
-      Math.pow(mx - mouseDownPos.x, 2) + Math.pow(my - mouseDownPos.y, 2)
-    );
-    if (distance > 5) { // 5 pixel threshold to distinguish click from drag
-      isDragging = true;
-      hasDraggedDistance = true;
+
+canvas.addEventListener("mousemove",e=>{
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(mouseDownPos && !isDragging){
+    if(Math.hypot(mx-mouseDownPos.x,my-mouseDownPos.y)>5){
+      isDragging=true;
       dragAffectedTriangles.clear();
-      dragChanges = [];
-      shuffleTriangleUnderPointer(mx, my);
+      dragChanges=[];
+      shuffleTriangleUnderPointer(mx,my);
     }
   }
-  
-  if (isDragging) {
-    shuffleTriangleUnderPointer(mx, my);
-  } else {
-    hoverIndex = -1;
-    for (let i = 0; i < triangles.length; i++) {
-      if (pointInTriangle(mx, my, triangles[i].points)) {
-        hoverIndex = i;
-        break;
-      }
-    }
-  }
+  if(isDragging) shuffleTriangleUnderPointer(mx,my);
+  else hoverIndex=triangles.findIndex(t=>pointInTriangle(mx,my,t.points));
 });
-canvas.addEventListener('mouseup', e => {
-  if (isDragging) {
-    isDragging = false;
-    justFinishedDrag = true;
+
+canvas.addEventListener("mouseup",()=>{
+  if(isDragging){
+    isDragging=false;
+    justFinishedDrag=true;
     saveBatchDiff([...dragChanges]);
     dragAffectedTriangles.clear();
-    dragChanges = [];
-    
-    // Update hoverIndex to current mouse position after drag ends
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    hoverIndex = -1;
-    for (let i = 0; i < triangles.length; i++) {
-      if (pointInTriangle(mx, my, triangles[i].points)) {
-        hoverIndex = i;
-        break;
-      }
-    }
-    
-    // Clear the flag after a short delay to prevent click interference
-    setTimeout(() => justFinishedDrag = false, 50);
+    dragChanges=[];
+    setTimeout(()=>justFinishedDrag=false,0);
   }
-  mouseDownPos = null;
-  hasDraggedDistance = false;
+  mouseDownPos=null;
 });
-canvas.addEventListener('mouseleave', () => {
-  hoverIndex = -1;
-  if (isDragging) {
-    isDragging = false;
-    justFinishedDrag = true;
-    saveBatchDiff([...dragChanges]);
-    dragAffectedTriangles.clear();
-    dragChanges = [];
-    setTimeout(() => justFinishedDrag = false, 50);
-  }
-  mouseDownPos = null;
-  hasDraggedDistance = false;
-});
-canvas.addEventListener('click', e => {
-  if (!hasDraggedDistance && !justFinishedDrag && hoverIndex >= 0) {
-    cycleTriangle(hoverIndex, 1);
-  }
-});
-canvas.addEventListener('contextmenu', e => {
-  e.preventDefault();
-  if (!hasDraggedDistance && !justFinishedDrag && hoverIndex >= 0) {
-    cycleTriangle(hoverIndex, -1);
+
+canvas.addEventListener("click",()=>{
+  if(justFinishedDrag) return;
+  if(hoverIndex>=0){
+    const t=triangles[hoverIndex];
+    const next=(t.colorIndex+1)%getCurrentColors().length;
+    saveBatchDiff([setTriangleColor(hoverIndex,next)]);
   }
 });
 
-// ---- Touch events ----
-canvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  const touch = e.touches[0];
-  const mx = touch.clientX - rect.left;
-  const my = touch.clientY - rect.top;
-  const idx = triangles.findIndex(t => pointInTriangle(mx, my, t.points));
-  
-  if (idx >= 0) {
-    lastTouchIndex = idx;
-    touchStartTime = Date.now();
-    
-    // Start drag immediately for touch
-    isDragging = true;
-    dragAffectedTriangles.clear();
-    dragChanges = [];
-    shuffleTriangleUnderPointer(mx, my);
-    
-    touchTimer = setTimeout(() => {
-      if (!isDragging) {
-        cycleTriangle(idx, -1); // long-press = backward
-      }
-      touchTimer = null;
-    }, LONG_PRESS_MS);
-  }
-});
-canvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  if (isDragging) {
-    const rect = canvas.getBoundingClientRect();
-    const touch = e.touches[0];
-    const mx = touch.clientX - rect.left;
-    const my = touch.clientY - rect.top;
-    shuffleTriangleUnderPointer(mx, my);
-  }
-});
-canvas.addEventListener('touchend', e => {
-  e.preventDefault();
-  if (touchTimer) {
-    clearTimeout(touchTimer);
-    touchTimer = null;
-  }
-  
-  if (isDragging) {
-    isDragging = false;
-    saveBatchDiff([...dragChanges]);
-    dragAffectedTriangles.clear();
-    dragChanges = [];
-  } else if (lastTouchIndex >= 0) {
-    cycleTriangle(lastTouchIndex, 1); // tap = forward
-  }
-  
-  setTimeout(() => lastTouchIndex = -1, 300); // remove highlight
-});
+/* ===================== UI wiring ===================== */
+document.getElementById("undo").onclick=undoAction;
+document.getElementById("reset").onclick=resetAction;
+document.getElementById("reshuffle").onclick=reshuffleAction;
+document.getElementById("colorScheme").onchange=e=>applyColorScheme(e.target.value);
 
-// ---- Color cycling ----
-function cycleTriangle(index, step) {
-  const t = triangles[index];
-  const oldColor = t.colorIndex;
-  const newColor = (oldColor + step + getCurrentColors().length) % getCurrentColors().length;
-  t.colorIndex = newColor;
-  t.animStart = performance.now();
-  t.targetColor = hexToRgb(getCurrentColors()[newColor]);
-  saveDiff(index, oldColor, newColor);
-}
-
-// ---- Buttons ----
-document.getElementById('undo').addEventListener('click', () => {
-  if (undoStack.length > 0) {
-    const diff = undoStack.pop();
-    applyDiff(diff, false);
-    redoStack.push(diff);
-  }
-});
-document.getElementById('reset').addEventListener('click', () => {
-  triangles.forEach((t, i) => {
-    t.colorIndex = originalColors[i];
-    t.animStart = performance.now();
-    t.targetColor = hexToRgb(getCurrentColors()[t.colorIndex]);
-  });
-  undoStack.length = 0;
-  redoStack.length = 0;
-});
-document.getElementById('reshuffle').addEventListener('click', () => {
-  triangles.forEach(t => {
-    t.colorIndex = Math.floor(Math.random() * getCurrentColors().length);
-    t.animStart = performance.now();
-    t.targetColor = hexToRgb(getCurrentColors()[t.colorIndex]);
-  });
-  originalColors = triangles.map(t => t.colorIndex);
-  undoStack.length = 0;
-  redoStack.length = 0;
-});
-document.getElementById('constant').addEventListener('click', () => {
-  const changes = [];
-  triangles.forEach((t, i) => {
-    const oldColor = t.colorIndex;
-    if (oldColor !== constantColorIndex) {
-      changes.push({ index: i, oldColor, newColor: constantColorIndex });
-      t.colorIndex = constantColorIndex;
-      t.animStart = performance.now();
-      t.targetColor = hexToRgb(getCurrentColors()[constantColorIndex]);
-    }
-  });
-  
-  if (changes.length > 0) {
-    saveBatchDiff(changes);
-  }
-  
-  // Cycle to next color for next click
-  constantColorIndex = (constantColorIndex + 1) % getCurrentColors().length;
-});
-
-// Color scheme change handler
-document.getElementById('colorScheme').addEventListener('change', (e) => {
-  currentColorScheme = e.target.value;
-  constantColorIndex = 0; // Reset constant color when scheme changes
-  triangles.forEach(t => {
-    // Clamp color index to new scheme's range
-    t.colorIndex = Math.min(t.colorIndex, getCurrentColors().length - 1);
-    t.animStart = performance.now();
-    t.targetColor = hexToRgb(getCurrentColors()[t.colorIndex]);
-  });
-  originalColors = triangles.map(t => t.colorIndex);
-  undoStack.length = 0;
-  redoStack.length = 0;
-});
-
-// ---- Animation loop ----
-function loop() {
-  draw();
-  requestAnimationFrame(loop);
-}
-
-// Populate color scheme dropdown
-function populateColorSchemeSelect() {
-  const select = document.getElementById('colorScheme');
-  Object.keys(COLOR_SCHEMES).forEach(schemeName => {
-    const option = document.createElement('option');
-    option.value = schemeName;
-    option.textContent = schemeName;
-    select.appendChild(option);
+/* ===================== Init ===================== */
+function populateColorSchemes(){
+  const sel=document.getElementById("colorScheme");
+  Object.keys(COLOR_SCHEMES).forEach(k=>{
+    const o=document.createElement("option");
+    o.value=o.textContent=k;
+    sel.appendChild(o);
   });
 }
 
-populateColorSchemeSelect();
-initGrid();
+function loop(){ draw(); requestAnimationFrame(loop); }
+
+populateColorSchemes();
+applyColorScheme(currentColorScheme);
 loop();
 </script>
-
-
-
-</body></html>
+</body>
+</html>
